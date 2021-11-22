@@ -126,6 +126,8 @@ public class PdfDemo {
 			// 2 - Add from S3 bucket
 			addFileFromS3(arrFileList);
 
+			// test
+
 		} catch (Exception e) {
 			System.out.println("Error in getting files");
 			return null;
