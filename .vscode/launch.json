@@ -1,0 +1,14 @@
+{
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Spring Boot-PdfDemoApplication<PdfDemo>",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "console": "internalConsole",
+            "mainClass": "com.pdf.demo.PdfDemoApplication",
+            "projectName": "PdfDemo",
+            "args": ""
+        }
+    ]
+}
