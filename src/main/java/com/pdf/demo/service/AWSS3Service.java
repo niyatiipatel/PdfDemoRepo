@@ -6,6 +6,8 @@ import java.io.OutputStream;
 import java.util.List;
 import java.util.ListIterator;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.PropertySource;
 import org.springframework.stereotype.Service;
 
 import software.amazon.awssdk.core.ResponseBytes;
@@ -18,7 +20,17 @@ import software.amazon.awssdk.services.s3.model.ListObjectsResponse;
 import software.amazon.awssdk.services.s3.model.S3Object;
 
 @Service
+
 public class AWSS3Service {
+
+    @Value("${cloud.s3.bucketName}")
+    String bucketName;
+
+    @Value("${cloud.aws.region}")
+    Region region;
+
+    @Value("${config.path}")
+    String path;
 
     public void listObjects(List<File> arrFileList) throws Exception {
 
@@ -26,8 +38,8 @@ public class AWSS3Service {
             return;
         }
 
-        String bucketName = "testbucketniyati";
-        Region region = Region.AP_SOUTH_1;
+        // String bucketName = "testbucketniyati";// use proprty file instead
+        // Region region = Region.AP_SOUTH_1;
         S3Client s3 = S3Client.builder().region(region).build();
 
         try {
@@ -47,7 +59,7 @@ public class AWSS3Service {
                                                                                                   // object
                 byte[] data = objectBytes.asByteArray();
 
-                String path = "/Users/ttt/Desktop/Work Personal/PdfDocs/S3/";
+                // String path = "/Users/ttt/Desktop/Work Personal/PdfDocs/S3/";
                 // create a local file and write data to it
                 File myFile = new File(path + myValue.key());
                 OutputStream os = new FileOutputStream(myFile);

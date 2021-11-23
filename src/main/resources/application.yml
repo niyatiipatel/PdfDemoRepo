@@ -1,0 +1,7 @@
+cloud:
+  aws:
+    region: ap-south-1
+  s3:
+    bucketName: testbucketniyati
+config:
+  path: /Users/ttt/Desktop/Work Personal/PdfDocs/S3/
