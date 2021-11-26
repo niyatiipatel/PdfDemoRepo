@@ -34,12 +34,15 @@ import org.apache.pdfbox.pdmodel.graphics.color.PDColor;
 import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceRGB;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationFileAttachment;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
 public class PdfDemo {
+
+	Logger logger = LoggerFactory.getLogger(PdfDemo.class);
 
 	@Autowired
 	AWSS3Service awsService;
@@ -51,6 +54,8 @@ public class PdfDemo {
 	float IMAGE_SIZE;
 	PDFont TIMES_BOLD;
 	PDFont TIMES_ROMAN;
+	float padding_x;
+	float padding_y;
 
 	public boolean generatePdf(UserData userObj, String position, String align) throws Exception {
 
@@ -68,9 +73,8 @@ public class PdfDemo {
 		value_y = blankPage.getMediaBox().getUpperRightY() - 20f;
 
 		PDPageContentStream content = new PDPageContentStream(doc, blankPage);
-		content.setLeading(LEADING);// If you don't use this, content will be overridden at the same place and not
-									// lead
-		// Ques - How to get the image from resource folder, have tried mvc
+		content.setLeading(LEADING);// If you don't use this, content will be overridden at the same place
+
 		// draw image based on postion and update X and Y values accordingly
 		createImage(position, align, content, doc, blankPage);
 
@@ -83,13 +87,55 @@ public class PdfDemo {
 		doc.addPage(blankPage); // add pages in document
 		createWaterMark(doc);
 
+		createHeader(doc);
+		createFooter(doc);
+
 		doc.save("/Users/ttt/Desktop/Work Personal/PdfDocs/Blank.pdf");// imp to save doc
 		System.out.println("PDF created");
 		doc.close();// imp to close doc
 		return true;
 	}
 
-	private void createFiles(PDPageContentStream content, PDDocument doc, PDPage blankPage) throws Exception {
+	public void createFooter(PDDocument doc) throws Exception {
+
+		for (PDPage page : doc.getPages()) {
+			PDPageContentStream footerContentStream = new PDPageContentStream(doc, page,
+					PDPageContentStream.AppendMode.APPEND, true, false);
+			footerContentStream.beginText();
+			footerContentStream.setFont(TIMES_ROMAN, 10);
+			PDRectangle pageSize = page.getMediaBox();
+			footerContentStream.newLineAtOffset(pageSize.getUpperRightX() - padding_x,
+					pageSize.getLowerLeftY() + padding_y);
+			String text = "Testing footer";
+			footerContentStream.showText(text);
+			footerContentStream.endText();
+			footerContentStream.close();
+
+		}
+
+	}
+
+	public void createHeader(PDDocument doc) throws Exception {
+
+		for (PDPage page : doc.getPages()) {
+			PDPageContentStream headerContentStream = new PDPageContentStream(doc, page,
+					PDPageContentStream.AppendMode.APPEND, true, false);
+			headerContentStream.beginText();
+			headerContentStream.setFont(TIMES_ROMAN, 10);
+			PDRectangle pageSize = page.getMediaBox();
+
+			headerContentStream.newLineAtOffset(pageSize.getUpperRightX() - padding_x,
+					pageSize.getUpperRightY() - padding_y);
+			String text = "Testing header";
+			headerContentStream.showText(text);
+			headerContentStream.endText();
+			headerContentStream.close();
+
+		}
+
+	}
+
+	public void createFiles(PDPageContentStream content, PDDocument doc, PDPage blankPage) throws Exception {
 
 		List<File> fileList = getFiles();
 
@@ -103,7 +149,7 @@ public class PdfDemo {
 		}
 	}
 
-	private void deleteS3Files(List<File> fileList) {
+	public void deleteS3Files(List<File> fileList) {
 
 		List<File> arrS3FileList = fileList.stream().filter(file -> file.getPath().contains("/S3/"))
 				.collect(Collectors.toList());
@@ -116,7 +162,7 @@ public class PdfDemo {
 		});
 	}
 
-	private List<File> getFiles() {
+	public List<File> getFiles() {
 
 		List<File> arrFileList = new ArrayList<File>();
 		try {
@@ -128,18 +174,19 @@ public class PdfDemo {
 			addFileFromS3(arrFileList);
 
 		} catch (Exception e) {
-			System.out.println("Error in getting files");
+			logger.error("Error in getting files", e);
 			return null;
 		}
 		return arrFileList;
 	}
 
-	private void addFileFromS3(List<File> fileList) throws Exception {
-
+	public void addFileFromS3(List<File> fileList) throws Exception {
+		awsService.setPrefix("dummy/");
+		awsService.setDelimiter("/");
 		awsService.listObjects(fileList);
 	}
 
-	private void addAnnotationAsFile(List<File> fileList, PDDocument doc, PDPage blankPage, PDPageContentStream content)
+	public void addAnnotationAsFile(List<File> fileList, PDDocument doc, PDPage blankPage, PDPageContentStream content)
 			throws IOException {
 
 		fileList.forEach(file -> {
@@ -197,7 +244,7 @@ public class PdfDemo {
 				content.endText();
 
 			} catch (IOException e) {
-
+				logger.error("msg", e);
 			}
 		});
 
@@ -256,6 +303,8 @@ public class PdfDemo {
 		IMAGE_SIZE = 100f;
 		TIMES_BOLD = PDType1Font.TIMES_BOLD;
 		TIMES_ROMAN = PDType1Font.TIMES_ROMAN;
+		padding_x = 80f;
+		padding_y = 15f;
 
 	}
 
