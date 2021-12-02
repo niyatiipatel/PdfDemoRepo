@@ -3,6 +3,8 @@ package com.pdf.demo.controller;
 import java.io.IOException;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -15,6 +17,8 @@ import com.pdf.demo.repo.UserDataRepo;
 
 @RestController
 public class PdfDemoController {
+
+	Logger logger = LoggerFactory.getLogger(PdfDemoController.class);
 
 	@Autowired
 	UserDataRepo userRepo;
@@ -37,13 +41,13 @@ public class PdfDemoController {
 				return "Error occured while generating a report";
 			}
 		} catch (NumberFormatException ne) {
-			System.out.println("Error" + ne);
+			logger.error("Error", ne);
 			return "Input should be a valid number";
 		} catch (IOException ioe) {
-			System.out.println("Error" + ioe);
+			logger.error("Error", ioe);
 			return "Error occured while generating a report";
 		} catch (Exception e) {
-			System.out.println("Error" + e);
+			logger.error("Error", e);
 			return "Error occured while generating a report";
 		}
 

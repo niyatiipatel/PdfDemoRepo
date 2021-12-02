@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import org.apache.pdfbox.contentstream.PDContentStream;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -97,7 +98,8 @@ class PdfDemoApplicationTests {
 			page = new PDPage();
 			doc = new PDDocument();
 			doc.addPage(page);
-			contentStream = new PDPageContentStream(doc, page);
+			contentStream = new PDPageContentStream(doc, page,
+					PDPageContentStream.AppendMode.APPEND, true, false);
 		} catch (IOException ioe) {
 
 		}
@@ -158,23 +160,22 @@ class PdfDemoApplicationTests {
 
 	@Test
 	@Order(4)
-	public void updateYvalueTest() {
-		pdfDemoObj.value_y = 5f;
+	public void updateYvalueTest() throws Exception {
+		float value_y = 5f;
 
 		doAnswer(s -> {
 			float value = s.getArgument(0);
-			assertEquals(pdfDemoObj.value_y - value, pdfDemoObj.value_y - 1f);
+			assertEquals(value_y - value, value_y - 1f);
 			return null;
-		}).when(pdfDemoObj).updateYvalue(anyFloat());
+		}).when(pdfDemoObj).updateYvalue(anyFloat(), any(PDPageContentStream.class));
 
-		pdfDemoObj.updateYvalue(1f);
-		verify(pdfDemoObj, times(1)).updateYvalue(1f);
+		pdfDemoObj.updateYvalue(1f, null);
+		verify(pdfDemoObj, times(1)).updateYvalue(1f, null);
 	}
 
 	@Test
 	@Order(5)
-	public void callNewLineTest() throws IOException {
-		pdfDemoObj.value_y = 5f;
+	public void callNewLineTest() throws Exception {
 
 		doAnswer(s -> {
 			int count = s.getArgument(0);
@@ -196,7 +197,7 @@ class PdfDemoApplicationTests {
 
 	@Test
 	@Order(6)
-	public void wrapStringTest() throws IOException {
+	public void wrapStringTest() throws Exception {
 		doAnswer(s -> {
 			String text = s.getArgument(0);
 			PDPageContentStream content = s.getArgument(1);
@@ -245,17 +246,13 @@ class PdfDemoApplicationTests {
 
 	@Test
 	@Order(9)
-	public void createImageTest() throws IOException {
+	public void createLogoTest() throws Exception {
 		doAnswer(s -> {
 			String position = s.getArgument(0);
 			String align = s.getArgument(1);
-			PDPageContentStream content = s.getArgument(2);
-			PDDocument doc = s.getArgument(3);
-			PDPage page = s.getArgument(4);
+			PDDocument doc = s.getArgument(2);
 
 			assertNotNull(doc);
-			assertNotNull(page);
-			assertNotNull(content);
 			assertThat(position).isIn(Arrays.asList("top", "bottom"));
 			assertThat(align).isIn(Arrays.asList("right", "left", "center"));
 
@@ -263,11 +260,10 @@ class PdfDemoApplicationTests {
 					() -> PDImageXObject.createFromFile("src/test/resources/images/Quest Diagnostics logo.jpeg", doc));
 
 			return null;
-		}).when(pdfDemoObj).createImage(anyString(), anyString(), any(PDPageContentStream.class), any(PDDocument.class),
-				any(PDPage.class));
+		}).when(pdfDemoObj).createLogo(anyString(), anyString(), any(PDDocument.class));
 
-		pdfDemoObj.createImage("top", "left", contentStream, doc, page);
-		verify(pdfDemoObj, times(1)).createImage("top", "left", contentStream, doc, page);
+		pdfDemoObj.createLogo("top", "left", doc);
+		verify(pdfDemoObj, times(1)).createLogo("top", "left", doc);
 	}
 
 	@Test
@@ -313,26 +309,6 @@ class PdfDemoApplicationTests {
 
 	@Test
 	@Order(13)
-	public void testCreateFiles() throws Exception {
-
-		doAnswer(s -> {
-			PDPageContentStream content = s.getArgument(0);
-			PDDocument doc = s.getArgument(1);
-			PDPage page = s.getArgument(2);
-			assertNotNull(doc);
-			assertNotNull(page);
-			assertNotNull(content);
-
-			return null;
-		}).when(pdfDemoObj).createFiles(any(PDPageContentStream.class), any(PDDocument.class), any(PDPage.class));
-
-		pdfDemoObj.createFiles(contentStream, doc, page);
-		verify(pdfDemoObj, times(1)).createFiles(contentStream, doc, page);
-
-	}
-
-	@Test
-	@Order(14)
 	public void testGetFiles() {
 
 		when(pdfDemoObj.getFiles()).thenReturn(arrList);
@@ -348,7 +324,7 @@ class PdfDemoApplicationTests {
 	}
 
 	@Test
-	@Order(15)
+	@Order(14)
 	public void testdeleteS3Files() throws Exception {
 
 		doAnswer(s -> {
@@ -370,7 +346,7 @@ class PdfDemoApplicationTests {
 	}
 
 	@Test
-	@Order(16)
+	@Order(15)
 	public void testAddFilesFromS3() throws Exception {
 
 		doAnswer(s -> {
@@ -388,20 +364,18 @@ class PdfDemoApplicationTests {
 	}
 
 	@Test
-	@Order(17)
+	@Order(16)
 	public void testAddAnnotationAsFile() throws Exception {
 
 		doAnswer(s -> {
 			List<File> arrList = s.getArgument(0);
 			PDDocument doc = s.getArgument(1);
 			PDPage page = s.getArgument(2);
-			PDPageContentStream content = s.getArgument(3);
 			assertNotNull(arrList);
 			assertThat(arrList.size()).isGreaterThan(0);
 			assertThat(arrList.get(0).getClass()).hasSameClassAs(File.class);
 			assertNotNull(doc);
 			assertNotNull(page);
-			assertNotNull(content);
 			File fileNew = arrList.get(0);
 			assertNotNull(fileNew);
 			assertDoesNotThrow(() -> new FileInputStream(fileNew));
@@ -409,16 +383,15 @@ class PdfDemoApplicationTests {
 			assertDoesNotThrow(() -> page.getAnnotations().add(new PDAnnotationFileAttachment()));
 
 			return null;
-		}).when(pdfDemoObj).addAnnotationAsFile(anyList(), any(PDDocument.class), any(PDPage.class),
-				any(PDPageContentStream.class));
+		}).when(pdfDemoObj).addAnnotationAsFile(anyList(), any(PDDocument.class), any(PDPage.class));
 
-		pdfDemoObj.addAnnotationAsFile(arrList, doc, page, contentStream);
-		verify(pdfDemoObj, times(1)).addAnnotationAsFile(arrList, doc, page, contentStream);
+		pdfDemoObj.addAnnotationAsFile(arrList, doc, page);
+		verify(pdfDemoObj, times(1)).addAnnotationAsFile(arrList, doc, page);
 
 	}
 
 	@Test
-	@Order(18)
+	@Order(17)
 	public void testAddEmbeddedFile() throws Exception {
 
 		doAnswer(s -> {
