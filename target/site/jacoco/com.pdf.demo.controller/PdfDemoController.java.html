@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PdfDemoController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">PdfDemo</a> &gt; <a href="index.source.html" class="el_package">com.pdf.demo.controller</a> &gt; <span class="el_source">PdfDemoController.java</span></div><h1>PdfDemoController.java</h1><pre class="source lang-java linenums">package com.pdf.demo.controller;
+
+import java.io.IOException;
+import java.util.Map;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.pdf.demo.PdfDemo;
+import com.pdf.demo.model.UserData;
+import com.pdf.demo.repo.UserDataRepo;
+
+@RestController
+<span class="fc" id="L19">public class PdfDemoController {</span>
+
+<span class="fc" id="L21">	Logger logger = LoggerFactory.getLogger(PdfDemoController.class);</span>
+
+	@Autowired
+	UserDataRepo userRepo;
+
+	@Autowired
+	PdfDemo pdfdemo;
+
+	@RequestMapping(value = &quot;/getUserData&quot;, produces = &quot;application/json&quot;)
+	@ResponseBody()
+	public String getUserData(@RequestParam Map&lt;String, String&gt; allParams) {
+		try {
+<span class="fc" id="L33">			UserData userObj = getUserById(allParams);</span>
+
+<span class="fc bfc" id="L35" title="All 2 branches covered.">			if (userObj == null) {</span>
+<span class="fc" id="L36">				return &quot;No User Found&quot;;</span>
+			}
+
+<span class="fc" id="L39">			boolean flag = generatePdf(userObj, allParams);</span>
+<span class="fc bfc" id="L40" title="All 2 branches covered.">			if (!flag) {</span>
+<span class="fc" id="L41">				return &quot;Error occured while generating a report&quot;;</span>
+			}
+<span class="fc" id="L43">		} catch (NumberFormatException ne) {</span>
+<span class="fc" id="L44">			logger.error(&quot;Error&quot;, ne);</span>
+<span class="fc" id="L45">			return &quot;Input should be a valid number&quot;;</span>
+<span class="nc" id="L46">		} catch (IOException ioe) {</span>
+<span class="nc" id="L47">			logger.error(&quot;Error&quot;, ioe);</span>
+<span class="nc" id="L48">			return &quot;Error occured while generating a report&quot;;</span>
+<span class="nc" id="L49">		} catch (Exception e) {</span>
+<span class="nc" id="L50">			logger.error(&quot;Error&quot;, e);</span>
+<span class="nc" id="L51">			return &quot;Error occured while generating a report&quot;;</span>
+<span class="fc" id="L52">		}</span>
+
+<span class="fc" id="L54">		return &quot;Report Generated&quot;;</span>
+	}
+
+	public boolean generatePdf(UserData userObj, Map&lt;String, String&gt; allParams) throws Exception {
+
+<span class="fc" id="L59">		boolean flag = pdfdemo.generatePdf(userObj,</span>
+<span class="pc bpc" id="L60" title="1 of 2 branches missed.">				allParams.containsKey(&quot;position&quot;) ? allParams.get(&quot;position&quot;).toString() : &quot;top&quot;,</span>
+<span class="pc bpc" id="L61" title="1 of 2 branches missed.">				allParams.containsKey(&quot;align&quot;) ? allParams.get(&quot;align&quot;).toString() : &quot;left&quot;);</span>
+<span class="fc" id="L62">		return flag;</span>
+	}
+
+	public UserData getUserById(Map&lt;String, String&gt; allParams) throws NumberFormatException {
+
+<span class="fc bfc" id="L67" title="All 4 branches covered.">		if (allParams.isEmpty() || !allParams.containsKey(&quot;id&quot;)) {</span>
+<span class="fc" id="L68">			return null;</span>
+		}
+
+<span class="fc" id="L71">		return userRepo.findById(Integer.valueOf(allParams.get(&quot;id&quot;).toString())).orElse(null);</span>
+	}
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.4.201905082037</span></div></body></html>

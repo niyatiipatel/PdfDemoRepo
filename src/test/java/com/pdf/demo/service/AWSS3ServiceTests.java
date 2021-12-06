@@ -2,14 +2,25 @@ package com.pdf.demo.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
 import java.util.Properties;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import com.pdf.demo.PdfDemoApplication;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer.OrderAnnotation;
+import org.mockito.InjectMocks;
+import org.mockito.MockitoAnnotations;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
@@ -32,26 +43,29 @@ class AWSS3ServiceTests {
     private static Region region;
     private static String bucketName;
 
-    static AWSS3Service awsService;
+    @InjectMocks
+    AWSS3Service awsService;
     static String objectName;
+
+    static Properties prop = new Properties();
+
+    private void setS3Client(S3Client s3client) {
+        AWSS3ServiceTests.s3client = s3client;
+    }
 
     @BeforeAll
     public static void setup() {
 
+        MockitoAnnotations.openMocks(AWSS3ServiceTests.class);
         try {
-            awsService = new AWSS3Service();
-            awsService.setPrefix("dummy/");
-            awsService.setDelimiter("/");
 
-            InputStream input = AWSS3ServiceTests.class.getClassLoader().getResourceAsStream("config.properties");
-            Properties prop = new Properties();
+            InputStream input = PdfDemoApplication.class.getClassLoader().getResourceAsStream("configTest.properties");
 
             prop.load(input);
 
             region = Region.of(prop.getProperty("region"));
             bucketName = prop.getProperty("bucketName");
 
-            s3client = awsService.getS3Client(region);
         } catch (IOException e) {
         }
     }
@@ -59,13 +73,19 @@ class AWSS3ServiceTests {
     @Test
     @Order(1)
     public void testS3Client() {
+        awsService.setPrefix("dummy/");
+        awsService.setDelimiter("/");
+        s3client = awsService.getS3Client(region);
         assertNotNull(s3client);
+        setS3Client(s3client);
     }
 
     @Test
     @Order(2)
     public void testListObjects() {
 
+        awsService.setPrefix("dummy/");
+        awsService.setDelimiter("/");
         ListObjectsRequest listObjReq = awsService.getListObjectRequest(bucketName);
         assertNotNull(listObjReq);
 
@@ -96,6 +116,37 @@ class AWSS3ServiceTests {
         byte[] data = awsService.getObjResponseInBytes(objectResponse);
         assertNotNull(data);
         assertThat(data.length).isGreaterThan(0);
+
+    }
+
+    @Test
+    @Order(4)
+    public void testgetAllObjects() {
+
+        awsService.setPrefix("dummy/");
+        awsService.setDelimiter("/");
+        List<S3Object> arrList = awsService.getAllObjects(s3client, bucketName);
+        assertNotNull(arrList);
+
+    }
+
+    @Test
+    @Order(5)
+    public void testgetListObjects() throws Exception {
+
+        awsService.setPath(prop.getProperty("config.path"));
+        awsService.setBucket(bucketName);
+        List<File> arrList = Stream.of(new File("any path")).collect(Collectors.toList());
+
+        assertNull(awsService.listObjects(null));
+        awsService.setPrefix(null);
+        assertNull(awsService.listObjects(arrList));
+        awsService.setDelimiter(null);
+        assertNull(awsService.listObjects(arrList));
+
+        awsService.setPrefix("dummy/");
+        awsService.setDelimiter("/");
+        assertNotNull(awsService.listObjects(arrList));
 
     }
 

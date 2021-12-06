@@ -1,0 +1,8 @@
+GROUP,PACKAGE,CLASS,INSTRUCTION_MISSED,INSTRUCTION_COVERED,BRANCH_MISSED,BRANCH_COVERED,LINE_MISSED,LINE_COVERED,COMPLEXITY_MISSED,COMPLEXITY_COVERED,METHOD_MISSED,METHOD_COVERED
+PdfDemo,com.pdf.demo.model,UserData,3,42,0,0,1,18,1,12,1,12
+PdfDemo,com.pdf.demo.spring,MvcConfig,0,20,0,0,0,3,0,2,0,2
+PdfDemo,com.pdf.demo.service,AWSS3Service,17,199,1,9,5,47,3,22,2,18
+PdfDemo,com.pdf.demo.service,PdfService,41,152,1,15,15,39,3,20,2,13
+PdfDemo,com.pdf.demo,PdfDemoApplication,5,3,0,0,2,1,1,1,1,1
+PdfDemo,com.pdf.demo,PdfDemo,187,964,11,33,41,209,11,36,3,22
+PdfDemo,com.pdf.demo.controller,PdfDemoController,18,84,2,10,6,20,2,8,0,4

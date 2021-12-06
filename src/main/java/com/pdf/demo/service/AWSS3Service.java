@@ -1,7 +1,9 @@
 package com.pdf.demo.service;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.OutputStream;
 import java.util.List;
 import java.util.ListIterator;
@@ -10,12 +12,12 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 
 import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.Bucket;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.ListObjectsRequest;
@@ -55,14 +57,22 @@ public class AWSS3Service {
         this.delimiter = delimiter;
     }
 
-    public void listObjects(List<File> arrFileList) throws Exception {
+    public void setPath(String path) {
+        this.path = path;
+    }
+
+    public void setBucket(String bucketName) {
+        this.bucketName = bucketName;
+    }
+
+    public List<File> listObjects(List<File> arrFileList) throws Exception {
 
         if (arrFileList == null) {
-            return;
+            return null;
         }
 
         if (prefix == null || delimiter == null) {
-            return;
+            return null;
         }
 
         S3Client s3 = getS3Client(region);
@@ -78,10 +88,7 @@ public class AWSS3Service {
                 byte[] data = getObjectContent(s3, objectName, bucketName);
 
                 // create a local file and write data to it
-                File myFile = new File(path + objectName.replace(prefix, ""));
-                OutputStream os = new FileOutputStream(myFile);
-                os.write(data);
-                os.close();
+                File myFile = writeToFile(objectName, data);
 
                 arrFileList.add(myFile);
 
@@ -93,6 +100,16 @@ public class AWSS3Service {
         } finally {
             s3.close();
         }
+
+        return arrFileList;
+    }
+
+    public File writeToFile(String objectName, byte[] data) throws FileNotFoundException, IOException {
+        File myFile = new File(path + objectName.replace(prefix, ""));
+        OutputStream os = new FileOutputStream(myFile);
+        os.write(data);
+        os.close();
+        return myFile;
     }
 
     public byte[] getObjectContent(S3Client s3, String objectName, String bucketName) {

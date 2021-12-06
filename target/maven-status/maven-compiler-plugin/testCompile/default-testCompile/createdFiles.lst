@@ -1,1 +1,4 @@
 com/pdf/demo/service/AWSS3ServiceTests.class
+com/pdf/demo/service/PdfServiceTest.class
+com/pdf/demo/PdfDemoTest.class
+com/pdf/demo/controller/PdfDemoControllerTests.class

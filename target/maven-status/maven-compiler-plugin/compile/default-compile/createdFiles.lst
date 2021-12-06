@@ -1,6 +1,8 @@
+com/pdf/demo/service/PdfService.class
 com/pdf/demo/model/UserData.class
 com/pdf/demo/controller/PdfDemoController.class
 com/pdf/demo/repo/UserDataRepo.class
+com/pdf/demo/PdfDemo.class
 com/pdf/demo/service/AWSS3Service.class
 com/pdf/demo/spring/MvcConfig.class
 com/pdf/demo/PdfDemoApplication.class

@@ -1,62 +1,49 @@
 package com.pdf.demo;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.InvalidPathException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
-
-import javax.swing.text.AbstractDocument.LeafElement;
 
 import com.pdf.demo.model.UserData;
-import com.pdf.demo.service.AWSS3Service;
+import com.pdf.demo.service.PdfService;
 
-import org.apache.pdfbox.cos.COSName;
-import org.apache.pdfbox.io.MemoryUsageSetting;
-import org.apache.pdfbox.tools.OverlayPDF;
 import org.apache.pdfbox.multipdf.Overlay;
-import org.apache.pdfbox.multipdf.PDFMergerUtility;
 import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.pdmodel.PDDocumentNameDictionary;
-import org.apache.pdfbox.pdmodel.PDEmbeddedFilesNameTreeNode;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.PDPageTree;
-import org.apache.pdfbox.pdmodel.PDResources;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
-import org.apache.pdfbox.pdmodel.common.filespecification.PDComplexFileSpecification;
-import org.apache.pdfbox.pdmodel.common.filespecification.PDEmbeddedFile;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
-import org.apache.pdfbox.pdmodel.graphics.PDXObject;
-import org.apache.pdfbox.pdmodel.graphics.color.PDColor;
-import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceRGB;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
-import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationFileAttachment;
-import org.apache.pdfbox.text.PDFTextStripper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
+
 public class PdfDemo {
 
-	Logger logger = LoggerFactory.getLogger(PdfDemo.class);
+	public Logger logger = LoggerFactory.getLogger(PdfDemo.class);
 
 	@Autowired
-	AWSS3Service awsService;
+	public PdfService pdfService;
+
+	@Value("${path_pdf}")
+	String pathPdf;
+
+	@Value("${path_src_pdf}")
+	String path_src_pdf;
+
+	@Value("${path_src_images}")
+	String path_src_images;
+
+	@Value("${path_src_input}")
+	String path_src_input;
 
 	float font_size;
 	float LEADING;// can increment by any number or simply set leading by font size
@@ -69,215 +56,236 @@ public class PdfDemo {
 	float[] initialCordinate;
 	PDDocument document;
 
-	private void initializeValues() {
+	private void initializeValues() throws IOException {
 
 		font_size = 12F;
 		LEADING = font_size * 1.1f;// can increment by any number or simply set leading by font size
-		imageSize = 50f;
+		imageSize = 100f;
 		TIMES_BOLD = PDType1Font.TIMES_BOLD;
 		TIMES_ROMAN = PDType1Font.TIMES_ROMAN;
 		initialCordinate = new float[] { 20f, 20f };
 		paddingCordinate = new float[] { 100f, 20f };
 		headerFooterSizeCordinate = 100f;
 		document = new PDDocument();// main class to create a pdf
+
 	}
 
 	public boolean generatePdf(UserData userObj, String position, String align) throws Exception {
 
 		initializeValues();
 
-		File destFile = new File("/Users/ttt/Desktop/Work Personal/PdfDocs/destFile.pdf");
+		File destFile = new File(pathPdf + "destFile.pdf");
 
-		File mainFile = new File("/Users/ttt/Desktop/Work Personal/PdfDocs/MainFile.pdf");
+		File mainFile = new File(pathPdf + "MainFile.pdf");
 		writeContent(document, userObj);
-		document.save(mainFile);
-		document.close();
 
-		File mergeFile = new File("/Users/ttt/Desktop/Work Personal/PdfDocs/mergeFile.pdf");
+		docSaveAndClose(mainFile, document);
+
 		List<File> arrFileList = getFiles();
 		if (arrFileList != null && !arrFileList.isEmpty()) {
-			mergeDocuments(arrFileList, mainFile, mergeFile);
+			mergeDocuments(destFile, mainFile, arrFileList);
 			deleteS3Files(arrFileList);
 		}
 
-		PDDocument doc = PDDocument.load(mergeFile);
-		File fileWatermark = getWaterMarkFile();
+		PDDocument destDocument = loadDoc(destFile);
+		updateDocPageSize(destFile, destDocument);
 
-		PDDocument docWaterMark = PDDocument.load(fileWatermark);
-		Overlay overlay = new Overlay();
-		overlay.setInputPDF(doc);
-		overlay.setAllPagesOverlayPDF(docWaterMark);
-		overlay.setOverlayPosition(Overlay.Position.BACKGROUND);
-		overlay.overlay(Collections.emptyMap());
-		doc.save(destFile);
-		doc.close();
+		createLogo(position, align, destDocument);
+		createHeader(destDocument);
+		createFooter(destDocument);
+		createWaterMark(destDocument);
 
-		PDDocument destDocument = PDDocument.load(destFile);
-		PDPageTree pageTree = destDocument.getDocumentCatalog().getPages();
-		for (PDPage page : pageTree) {
-			page.setMediaBox(getPageSize());
-		}
+		docSaveAndClose(destFile, destDocument);
 
-		// createLogo(position, align, doc);
-		// createHeader(doc);
-		// createFooter(doc);
-		// createWaterMark(doc);
-
-		destDocument.save(destFile);
-		destDocument.close();
-
-		Files.deleteIfExists(mainFile.toPath());
-		Files.deleteIfExists(fileWatermark.toPath());
-		Files.deleteIfExists(mergeFile.toPath());
+		deleteFileFromSys(mainFile);
 
 		System.out.println("PDF created");
 
 		return true;
 	}
 
-	private File getWaterMarkFile() throws Exception {
+	public boolean updateDocPageSize(File destFile, PDDocument destDocument) throws IOException {
+		PDPageTree pageTree = destDocument.getDocumentCatalog().getPages();
+		for (PDPage page : pageTree) {
+			page.setMediaBox(getPageSize());
+		}
+		return true;
+	}
 
-		PDDocument doc = new PDDocument();
-		PDPage page = getDocPage();
-		doc.addPage(page);
-		PDPageContentStream headerStream = getPageContentStream(doc, page);
-		headerStream.setLeading(LEADING);
-		headerStream.setFont(TIMES_ROMAN, font_size);
-		headerStream.beginText();
-		headerStream.newLineAtOffset(page.getMediaBox().getUpperRightX() - 100f,
-				page.getMediaBox().getUpperRightY() - 15f);
-		headerStream.showText("Sample Header");
-		headerStream.endText();
-		headerStream.close();
+	public void docSaveAndClose(File mainFile, PDDocument doc) throws IOException {
+		doc.save(mainFile);
+		doc.close();
+	}
 
-		PDPageContentStream footerStream = getPageContentStream(doc, page);
-		footerStream.setLeading(LEADING);
-		footerStream.setFont(TIMES_ROMAN, font_size);
-		footerStream.beginText();
-		footerStream.newLineAtOffset(page.getMediaBox().getUpperRightX() - 100f,
-				page.getMediaBox().getLowerLeftY() + 15f);
-		footerStream.showText("Sample Footer");
-		footerStream.endText();
-		footerStream.close();
+	public PDDocument loadDoc(File file) throws IOException {
+		return PDDocument.load(file);
+	}
 
-		PDPageContentStream logoStream = getPageContentStream(doc, page);
-		logoStream.setLeading(LEADING);
-		float tempX = page.getMediaBox().getLowerLeftX() + 10f;
-		float tempY = page.getMediaBox().getUpperRightY() - 50f;
+	public boolean mergeDocuments(File destFile, File mainFile, List<File> arrFileList) {
+		try {
+			pdfService.mergeDocuments(destFile, mainFile, arrFileList);
+		} catch (Exception e) {
+			return false;
+		}
+		return true;
+	}
 
-		PDImageXObject image = PDImageXObject
-				.createFromFile("src/main/resources/static/images/Quest Diagnostics logo.jpeg", doc);
-		logoStream.drawImage(image, tempX, tempY, imageSize, imageSize);
-		logoStream.close();
+	public PDPageContentStream updateYvalue(float value, PDPageContentStream content) throws Exception {
 
-		File file = new File("src/main/resources/static/pdf/watermark.pdf");
+		if (newLineCordinate[1] <= (headerFooterSizeCordinate * 1.55f)) {
+			content.endText();
+			content.close();
 
-		PDDocument docWaterMark = PDDocument.load(file);
+			content = getNewContentStream();
+		} else {
+			newLineCordinate[1] = newLineCordinate[1] - value;
+		}
+
+		return content;
+	}
+
+	public PDPageContentStream callNewLine(int count, PDPageContentStream content) throws Exception {
+
+		for (int i = 0; i < count; i++) {
+			content = updateYvalue(LEADING, content);
+			content.newLine();
+		}
+
+		return content;
+	}
+
+	public PDPageContentStream wrapString(String text, PDPageContentStream content) throws Exception {
+		int length = text.length();
+		int firstIndex = 0;
+		int lastIndex = 110;
+		while (length >= firstIndex) {
+			if (length < lastIndex) {
+				lastIndex = length;
+			}
+			String temp = text.substring(firstIndex, lastIndex).trim();
+			content.showText(temp);
+			content.newLine();
+			firstIndex += 110;
+			lastIndex += 110;
+			content = updateYvalue(LEADING, content);
+		}
+
+		return content;
+	}
+
+	public boolean createWaterMark(PDDocument doc) throws IOException {
+
+		HashMap<Integer, String> overlayGuide = new HashMap<Integer, String>();
+		for (int i = 1; i <= doc.getNumberOfPages(); i++) {
+			overlayGuide.put(i, path_src_pdf + "watermark.pdf");
+		}
+
+		PDDocument docWaterMark = loadDoc(new File(path_src_pdf + "watermark.pdf"));
 		Overlay overlay = new Overlay();
 		overlay.setInputPDF(doc);
 		overlay.setAllPagesOverlayPDF(docWaterMark);
 		overlay.setOverlayPosition(Overlay.Position.BACKGROUND);
-		overlay.overlay(Collections.emptyMap());
-
-		File fileWatermark = new File("/Users/ttt/Desktop/Work Personal/PdfDocs/Watermark.pdf");
-		doc.save(fileWatermark);
-		doc.close();
-
-		return fileWatermark;
+		overlay.overlay(overlayGuide);
+		return true;
 	}
 
-	private PDRectangle getPageSize() {
-		return PDRectangle.A4;
-	}
+	public boolean createLogo(String position, String align, PDDocument doc)
+			throws Exception {
 
-	// merge all source documents to destination
-	private void mergeDocuments(List<File> arrFileList, File sourceFile, File destFile) throws Exception {
-		PDFMergerUtility mergerUtil = new PDFMergerUtility();
-		mergerUtil.setDestinationFileName(destFile.getPath());
-		mergerUtil.addSource(sourceFile);
+		PDImageXObject image = PDImageXObject
+				.createFromFile(path_src_images + "Quest Diagnostics logo.jpeg", doc);
 
-		arrFileList.forEach(file -> {
-			try {
-				mergerUtil.addSource(file);
-			} catch (Exception e) {
-				logger.error("File Not Found", e);
+		for (PDPage page : doc.getPages()) {
+			PDPageContentStream imageContentStream = getPageContentStream(doc, page);
+
+			float tempX = page.getMediaBox().getLowerLeftX() + initialCordinate[0];
+			float tempY = page.getMediaBox().getUpperRightY() + initialCordinate[1] - headerFooterSizeCordinate;
+
+			if (position.equalsIgnoreCase("top")) {
+				// updateYvalue(imageSize, null);
+				// tempY = newLineCordinate[1];
+			} else if (position.equalsIgnoreCase("bottom")) {
+				tempY = page.getMediaBox().getLowerLeftY();
 			}
-		});
-
-		mergerUtil.mergeDocuments(MemoryUsageSetting.setupMainMemoryOnly());
-
-	}
-
-	// add pages in existing document as it is
-	private void writeFromFileNew(PDDocument document) throws Exception {
-		File file = new File("src/main/resources/static/pdf/TestImage.pdf");
-
-		PDDocument docExtracted = PDDocument.load(file);
-		PDPageTree tree = docExtracted.getPages();
-		for (PDPage pageNew : tree) {
-			document.addPage(pageNew);
-
-		}
-
-	}
-
-	// Extracting image from pdf and merging in main pdf
-	private void writeFromImage(PDDocument document) throws Exception {
-		File file = new File("src/main/resources/static/pdf/TestImage.pdf");
-
-		PDDocument docExtracted = PDDocument.load(file);
-
-		PDPageTree list = docExtracted.getPages();
-		for (PDPage page : list) {
-			PDResources pdResources = page.getResources();
-			for (COSName c : pdResources.getXObjectNames()) {
-				PDXObject o = pdResources.getXObject(c);
-				PDImageXObject obj = (PDImageXObject) o;
-
-				PDPage pageNew = getDocPage();
-				document.addPage(pageNew);
-				PDPageContentStream imageContentStream = getPageContentStream(document, pageNew);
-
-				imageContentStream.drawImage(obj, 50, 50, imageSize, imageSize);
-				imageContentStream.close();
+			if (align.equalsIgnoreCase("left")) {
+				// tempX = newLineCordinate[0];
+			} else if (align.equalsIgnoreCase("right")) {
+				tempX = page.getMediaBox().getUpperRightX() - imageSize;// allocate some space from right for image size
+			} else if (align.equalsIgnoreCase("center")) {
+				tempX = (page.getMediaBox().getUpperRightX() - imageSize) / 2;
 			}
+
+			imageContentStream.drawImage(image, tempX, tempY, imageSize, imageSize);
+			imageContentStream.close();
+
 		}
+		return true;
+		// updateYvalue(LEADING, null);/
+
 	}
 
-	// extract text from pdf and merging in main pdf
-	private void writeFromFile(PDDocument document) throws Exception {
+	public boolean createFooter(PDDocument doc) throws Exception {
 
-		File file = new File("src/main/resources/static/pdf/TestText.pdf");
+		for (PDPage page : doc.getPages()) {
+			PDPageContentStream footerContentStream = getPageContentStream(doc, page);
+			footerContentStream.beginText();
+			footerContentStream.setFont(TIMES_ROMAN, 10);
+			PDRectangle pageSize = page.getMediaBox();
+			footerContentStream.newLineAtOffset(pageSize.getUpperRightX() - paddingCordinate[0],
+					pageSize.getLowerLeftY() + paddingCordinate[1]);
+			String text = "Sample Footer";
+			footerContentStream.showText(text);
+			footerContentStream.endText();
+			footerContentStream.close();
 
-		PDDocument docExtracted = PDDocument.load(file);
-
-		PDFTextStripper stripper = new PDFTextStripper();
-		stripper.setLineSeparator(System.lineSeparator());
-		stripper.setStartPage(0);
-		stripper.setEndPage(docExtracted.getNumberOfPages());
-		String text = stripper.getText(docExtracted);
-
-		String[] textDtls = text.split(System.lineSeparator());
-
-		PDPageContentStream content = getNewContentStream();
-
-		for (String line : textDtls) {
-			content = callNewLine(1, content);
-			content.showText(line);
 		}
 
-		content.endText();
-		content.close();
-		docExtracted.close();
+		return true;
 
+	}
+
+	public boolean createHeader(PDDocument doc) throws Exception {
+
+		for (PDPage page : doc.getPages()) {
+			PDPageContentStream headerContentStream = getPageContentStream(doc, page);
+			headerContentStream.beginText();
+			headerContentStream.setFont(TIMES_ROMAN, 10);
+			PDRectangle pageSize = page.getMediaBox();
+
+			headerContentStream.newLineAtOffset(pageSize.getUpperRightX() - paddingCordinate[0],
+					pageSize.getUpperRightY() - paddingCordinate[1]);
+			String text = "Sample Header";
+			headerContentStream.showText(text);
+			headerContentStream.endText();
+			headerContentStream.close();
+
+		}
+
+		return true;
+	}
+
+	public List<File> getFiles() {
+
+		return pdfService.getFiles();
+	}
+
+	public void deleteS3Files(List<File> fileList) {
+		pdfService.deleteS3Files(fileList);
+	}
+
+	public void deleteFileFromSys(File mainFile) throws IOException {
+		pdfService.deleteFileFromSys(mainFile);
+	}
+
+	public PDRectangle getPageSize() {
+		return pdfService.getPageSize();
 	}
 
 	// static text in main pdf
-
 	public void writeContent(PDDocument doc, UserData userObj) throws Exception {
 		boolean continueFlag = true;
 
-		String data = readFile("src/main/resources/static/inputData/inputData.txt");
+		String data = readFile(path_src_input + "inputData.txt");
 		String[] arrData = data.split("BREAK");
 
 		PDPageContentStream content = getNewContentStream();
@@ -354,6 +362,18 @@ public class PdfDemo {
 
 	}
 
+	public String readFile(String path) throws IOException {
+		return pdfService.readFile(path);
+	}
+
+	public PDPage getDocPage() {
+		return pdfService.getDocPage();
+	}
+
+	public PDPageContentStream getPageContentStream(PDDocument doc, PDPage page) throws Exception {
+		return pdfService.getPageContentStream(doc, page);
+	}
+
 	private PDPageContentStream getNewContentStream() throws Exception {
 
 		PDPage page = getDocPage();
@@ -369,298 +389,7 @@ public class PdfDemo {
 		return content;
 	}
 
-	private PDPage getDocPage() {
-		return new PDPage(getPageSize());
-	}
-
-	public void createFooter(PDDocument doc) throws Exception {
-
-		for (PDPage page : doc.getPages()) {
-			PDPageContentStream footerContentStream = getPageContentStream(doc, page);
-			footerContentStream.beginText();
-			footerContentStream.setFont(TIMES_ROMAN, 10);
-			PDRectangle pageSize = page.getMediaBox();
-			footerContentStream.newLineAtOffset(pageSize.getUpperRightX() - paddingCordinate[0],
-					pageSize.getLowerLeftY() + paddingCordinate[1]);
-			String text = "Sample Footer";
-			footerContentStream.showText(text);
-			footerContentStream.endText();
-			footerContentStream.close();
-
-		}
-
-	}
-
-	private PDPageContentStream getPageContentStream(PDDocument doc, PDPage page) throws IOException {
-		return new PDPageContentStream(doc, page,
-				PDPageContentStream.AppendMode.APPEND, false, true);
-	}
-
-	public void createHeader(PDDocument doc) throws Exception {
-
-		for (PDPage page : doc.getPages()) {
-			PDPageContentStream headerContentStream = getPageContentStream(doc, page);
-			headerContentStream.beginText();
-			headerContentStream.setFont(TIMES_ROMAN, 10);
-			PDRectangle pageSize = page.getMediaBox();
-
-			headerContentStream.newLineAtOffset(pageSize.getUpperRightX() - paddingCordinate[0],
-					pageSize.getUpperRightY() - paddingCordinate[1]);
-			String text = "Sample Header";
-			headerContentStream.showText(text);
-			headerContentStream.endText();
-			headerContentStream.close();
-
-		}
-
-	}
-
-	public void deleteS3Files(List<File> fileList) {
-
-		List<File> arrS3FileList = fileList.stream().filter(file -> file.getPath().contains("/S3/"))
-				.collect(Collectors.toList());
-		arrS3FileList.forEach(file -> {
-			try {
-				Files.deleteIfExists(Paths.get(file.getPath()));
-			} catch (IOException e) {
-
-			}
-		});
-	}
-
-	public List<File> getFiles() {
-
-		List<File> arrFileList = new ArrayList<File>();
-		try {
-
-			// 1 - Add from local system
-			arrFileList.add(new File("src/main/resources/static/pdf/Test.pdf"));
-
-			// 2 - Add from S3 bucket
-			addFileFromS3(arrFileList);
-
-		} catch (Exception e) {
-			logger.error("Error in getting files", e);
-			return null;
-		}
-		return arrFileList;
-	}
-
-	public void addFileFromS3(List<File> fileList) throws Exception {
-		awsService.setPrefix("dummy/");
-		awsService.setDelimiter("/");
-		awsService.listObjects(fileList);
-	}
-
-	// add files in form of annotation in main pdf
-	public void addAnnotationAsFile(List<File> fileList, PDDocument doc, PDPage blankPage)
-			throws Exception {
-
-		fileList.forEach(file -> {
-
-			try {
-
-				PDComplexFileSpecification fs = new PDComplexFileSpecification();
-
-				FileInputStream fins1 = new FileInputStream(file);
-				PDEmbeddedFile ef = new PDEmbeddedFile(doc, fins1);
-
-				fs.setEmbeddedFile(ef);
-				fs.setFile(file.getPath());
-
-				PDAnnotationFileAttachment txtLink = new PDAnnotationFileAttachment();
-
-				txtLink.setFile(fs);
-				PDColor blue = new PDColor(new float[] { 0, 1, 0 }, PDDeviceRGB.INSTANCE);
-				txtLink.setColor(blue);
-				txtLink.setAttachementName(PDAnnotationFileAttachment.ATTACHMENT_NAME_PAPERCLIP);
-
-				// Set the rectangle containing the link
-				int offsetX = (int) newLineCordinate[0];
-				int offsetY = (int) newLineCordinate[1];
-				PDRectangle positionn = new PDRectangle();
-				positionn.setLowerLeftX(offsetX);
-				positionn.setLowerLeftY(offsetY);
-				positionn.setUpperRightX(offsetX + 5);
-				positionn.setUpperRightY(offsetY + 10);
-
-				// Below code is to add custom image as annotation
-				/*
-				 * PDAppearanceDictionary appearanceDictionary = new PDAppearanceDictionary();
-				 * PDAppearanceStream appearanceStream = new PDAppearanceStream(doc);
-				 * appearanceStream.setResources(new PDResources());
-				 * appearanceStream.setBBox(positionn); PDImageXObject image =
-				 * PDImageXObject.createFromFile(
-				 * "src/main/resources/static/images/attachImage.png", doc);
-				 * content.drawImage(image, offsetX, offsetY, 15f, 15f);
-				 * appearanceDictionary.setNormalAppearance(appearanceStream);
-				 * txtLink.setAppearance(appearanceDictionary);
-				 */
-
-				txtLink.setRectangle(positionn);
-				blankPage.getAnnotations().add(txtLink);
-
-				PDPageContentStream annotationContentStream = getPageContentStream(doc, blankPage);
-
-				String text = "Click here to view " + file.getName();
-				annotationContentStream.beginText();
-
-				annotationContentStream.setFont(TIMES_ROMAN, font_size - 1);
-				annotationContentStream.newLineAtOffset(newLineCordinate[0] + 10f, newLineCordinate[1]);
-				annotationContentStream.showText(text);
-				callNewLine(1, annotationContentStream);
-				annotationContentStream.endText();
-				annotationContentStream.close();
-
-			} catch (Exception e) {
-				logger.error("msg", e);
-			}
-		});
-
-	}
-
-	// add files in form of attachment in main pdf
-	public void addEmbeddedFile(List<File> fileList, PDDocument doc, PDPage blankPage)
-			throws IOException, FileNotFoundException {
-
-		// embedded files are stored in a named tree. this is main tree node
-		PDEmbeddedFilesNameTreeNode mainTreeNode = new PDEmbeddedFilesNameTreeNode();
-
-		PDEmbeddedFilesNameTreeNode treeNode = new PDEmbeddedFilesNameTreeNode();
-
-		Map<String, PDComplexFileSpecification> map = fileList.stream()
-				.collect(Collectors.toMap(f -> f.getName(), f -> {
-					PDComplexFileSpecification fs = new PDComplexFileSpecification();
-					fs.setFile(f.getPath());
-
-					// create stream for the file to be embedded
-					InputStream inputStream;
-					try {
-						inputStream = new FileInputStream(f);
-						// represents the embedded file
-						PDEmbeddedFile ef = new PDEmbeddedFile(doc, inputStream);
-
-						ef.setCreationDate(Calendar.getInstance());
-						fs.setEmbeddedFile(ef);
-
-					} catch (Exception e) {
-
-					}
-					return fs;
-				}));
-
-		treeNode.setNames(map);// add
-
-		// add the new node as kid to the main tree node
-		List<PDEmbeddedFilesNameTreeNode> childTreeNodeList = new ArrayList<PDEmbeddedFilesNameTreeNode>();
-		childTreeNodeList.add(treeNode);
-		mainTreeNode.setKids(childTreeNodeList);
-
-		// add the tree to the document catalog of current document
-		PDDocumentNameDictionary names = new PDDocumentNameDictionary(doc.getDocumentCatalog());
-		names.setEmbeddedFiles(mainTreeNode);
-		doc.getDocumentCatalog().setNames(names);
-	}
-
-	public String readFile(String string) throws IOException, InvalidPathException {
-		return new String(Files.readAllBytes(Paths.get("src/main/resources/static/inputData/inputData.txt")));
-	}
-
-	public void createWaterMark(PDDocument doc) throws IOException {
-
-		HashMap<Integer, String> overlayGuide = new HashMap<Integer, String>();
-		for (int i = 1; i <= doc.getNumberOfPages(); i++) {
-			overlayGuide.put(i, "src/main/resources/static/pdf/watermark1.pdf");
-		}
-
-		PDDocument docWaterMark = PDDocument.load(new File("src/main/resources/static/pdf/watermark1.pdf"));
-		Overlay overlay = new Overlay();
-		overlay.setInputPDF(doc);
-		overlay.setAllPagesOverlayPDF(docWaterMark);
-		overlay.setOverlayPosition(Overlay.Position.BACKGROUND);
-		overlay.overlay(overlayGuide);
-
-	}
-
-	public void createLogo(String position, String align, PDDocument doc)
-			throws Exception {
-
-		PDImageXObject image = PDImageXObject
-				.createFromFile("src/main/resources/static/images/Quest Diagnostics logo.jpeg", doc);
-
-		for (PDPage page : doc.getPages()) {
-			PDPageContentStream imageContentStream = getPageContentStream(doc, page);
-
-			float tempX = page.getMediaBox().getLowerLeftX() + initialCordinate[0];
-			float tempY = page.getMediaBox().getUpperRightY() + initialCordinate[1] - headerFooterSizeCordinate;
-
-			if (position.equalsIgnoreCase("top")) {
-				// updateYvalue(imageSize, null);
-				// tempY = newLineCordinate[1];
-			} else if (position.equalsIgnoreCase("bottom")) {
-				tempY = page.getMediaBox().getLowerLeftY();
-			}
-			if (align.equalsIgnoreCase("left")) {
-				// tempX = newLineCordinate[0];
-			} else if (align.equalsIgnoreCase("right")) {
-				tempX = page.getMediaBox().getUpperRightX() - imageSize;// allocate some space from right for image size
-			} else if (align.equalsIgnoreCase("center")) {
-				tempX = (page.getMediaBox().getUpperRightX() - imageSize) / 2;
-			}
-
-			imageContentStream.drawImage(image, tempX, tempY, imageSize, imageSize);
-			imageContentStream.close();
-
-		}
-
-		// updateYvalue(LEADING, null);/
-
-	}
-
-	public PDPageContentStream updateYvalue(float value, PDPageContentStream content) throws Exception {
-
-		if (newLineCordinate[1] <= (headerFooterSizeCordinate * 1.55f)) {
-			content.endText();
-			content.close();
-
-			content = getNewContentStream();
-		} else {
-			newLineCordinate[1] = newLineCordinate[1] - value;
-		}
-
-		return content;
-	}
-
-	public PDPageContentStream wrapString(String text, PDPageContentStream content) throws Exception {
-		int length = text.length();
-		int firstIndex = 0;
-		int lastIndex = 110;
-		while (length >= firstIndex) {
-			if (length < lastIndex) {
-				lastIndex = length;
-			}
-			String temp = text.substring(firstIndex, lastIndex).trim();
-			content.showText(temp);
-			content.newLine();
-			firstIndex += 110;
-			lastIndex += 110;
-			content = updateYvalue(LEADING, content);
-		}
-
-		return content;
-	}
-
-	public PDPageContentStream callNewLine(int count, PDPageContentStream content) throws Exception {
-
-		for (int i = 0; i < count; i++) {
-			content = updateYvalue(LEADING, content);
-			content.newLine();
-		}
-
-		return content;
-	}
-
-	private void createTable(UserData userObj, PDPageContentStream contentStream, PDDocument doc)
+	public void createTable(UserData userObj, PDPageContentStream contentStream, PDDocument doc)
 			throws Exception {
 
 		float margin = newLineCordinate[0];// need a constant X value for rows and column creation
@@ -711,7 +440,7 @@ public class PdfDemo {
 			for (int j = 0; j < cols; j++) {
 				contentStream.beginText();
 				contentStream.newLineAtOffset(textx, texty);
-				contentStream.showText(getText(index, mapObj));
+				contentStream.showText(getText(mapObj, index));
 				index++;
 				contentStream.endText();
 				textx += colWidth;
@@ -724,22 +453,7 @@ public class PdfDemo {
 
 	}
 
-	public String getText(int index, Map<String, String> mapObj) {
-
-		if (index == 0) {
-			return mapObj.get("name");
-		} else if (index == 1) {
-			return mapObj.get("result");
-		} else if (index == 2) {
-			return mapObj.get("expected");
-		} else if (index == 3) {
-			return mapObj.get("test");
-		} else if (index == 4) {
-			return mapObj.get("resultValue");
-		} else if (index == 5) {
-			return mapObj.get("expectedValue");
-		}
-		return "";
+	public String getText(Map<String, String> mapObj, int index) {
+		return pdfService.getText(mapObj, index);
 	}
-
 }
